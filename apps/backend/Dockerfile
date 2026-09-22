@@ -1,9 +1,9 @@
-FROM python:3.12-slim AS build
+FROM python:3.14-slim AS build
 WORKDIR /build
 COPY requirements.txt .
 RUN pip wheel --no-cache-dir --wheel-dir=/wheels -r requirements.txt
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* && useradd --uid 10001 --create-home app
 WORKDIR /app
