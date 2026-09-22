@@ -1,0 +1,145 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: One-time private DB login bootstrap. Delete this stack after success.
+Parameters:
+  FoundationStack:
+    Type: String
+Resources:
+  Logs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: RequiredAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - secretsmanager:GetSecretValue
+            Resource:
+            - Fn::ImportValue:
+                Fn::Sub: ${FoundationStack}-AdminSecret
+            - Fn::ImportValue:
+                Fn::Sub: ${FoundationStack}-AppSecret
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+            Resource:
+              Fn::Join:
+              - ''
+              - - 'arn:'
+                - Ref: AWS::Partition
+                - ':s3:::'
+                - Fn::ImportValue:
+                    Fn::Sub: ${FoundationStack}-Artifacts
+                - /bootstrap/*
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+              Fn::GetAtt:
+              - Logs
+              - Arn
+          - Effect: Allow
+            Action:
+            - ec2:CreateNetworkInterface
+            - ec2:DescribeDhcpOptions
+            - ec2:DescribeNetworkInterfaces
+            - ec2:DeleteNetworkInterface
+            - ec2:DescribeSubnets
+            - ec2:DescribeSecurityGroups
+            - ec2:DescribeVpcs
+            Resource: '*'
+          - Effect: Allow
+            Action: ec2:CreateNetworkInterfacePermission
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+            Condition:
+              StringEquals:
+                ec2:AuthorizedService: codebuild.amazonaws.com
+          - Effect: Allow
+            Action:
+            - s3:GetBucketAcl
+            - s3:GetBucketLocation
+            Resource:
+              Fn::Join:
+              - ''
+              - - 'arn:'
+                - Ref: AWS::Partition
+                - ':s3:::'
+                - Fn::ImportValue:
+                    Fn::Sub: ${FoundationStack}-Artifacts
+  Project:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      ServiceRole:
+        Fn::GetAtt:
+        - Role
+        - Arn
+      TimeoutInMinutes: 15
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Source:
+        Type: S3
+        Location:
+          Fn::Join:
+          - ''
+          - - Fn::ImportValue:
+                Fn::Sub: ${FoundationStack}-Artifacts
+            - /bootstrap/source.zip
+        BuildSpec: "phases:\n  build:\n    commands:\n    - python -m pip install boto3 \"psycopg[binary]\"\n  \
+          \  - python bootstrap_db.py\nversion: 0.2\n"
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        EnvironmentVariables:
+        - Name: ADMIN_SECRET_ARN
+          Value:
+            Fn::ImportValue:
+              Fn::Sub: ${FoundationStack}-AdminSecret
+        - Name: APP_SECRET_ARN
+          Value:
+            Fn::ImportValue:
+              Fn::Sub: ${FoundationStack}-AppSecret
+        - Name: DB_HOST
+          Value:
+            Fn::ImportValue:
+              Fn::Sub: ${FoundationStack}-DBHost
+        - Name: DB_NAME
+          Value:
+            Fn::ImportValue:
+              Fn::Sub: ${FoundationStack}-DBName
+      VpcConfig:
+        VpcId:
+          Fn::ImportValue:
+            Fn::Sub: ${FoundationStack}-Vpc
+        Subnets:
+        - Fn::ImportValue:
+            Fn::Sub: ${FoundationStack}-Private1
+        - Fn::ImportValue:
+            Fn::Sub: ${FoundationStack}-Private2
+        SecurityGroupIds:
+        - Fn::ImportValue:
+            Fn::Sub: ${FoundationStack}-ApplicationSG
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName:
+            Ref: Logs
+Outputs:
+  Project:
+    Value:
+      Ref: Project

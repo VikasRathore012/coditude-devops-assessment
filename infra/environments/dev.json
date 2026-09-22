@@ -1,0 +1,26 @@
+{
+  "foundation": {
+    "Environment": "dev",
+    "VpcCidr": "10.40.0.0/16",
+    "DbClass": "db.t4g.micro",
+    "DBName": "assessment",
+    "AlertEmail": ""
+  },
+  "ecs": {
+    "FoundationStack": "coditude-dev-foundation",
+    "Environment": "dev",
+    "CertificateArn": "REPLACE_WITH_ACM_CERTIFICATE_ARN",
+    "MinCapacity": "2",
+    "MaxCapacity": "4",
+    "FrontendImage": "REPLACE_WITH_ECR_DIGEST",
+    "BackendImage": "REPLACE_WITH_ECR_DIGEST"
+  },
+  "ec2": {
+    "FoundationStack": "coditude-dev-foundation",
+    "Environment": "dev",
+    "CertificateArn": "REPLACE_WITH_ACM_CERTIFICATE_ARN",
+    "MinCapacity": "2",
+    "MaxCapacity": "4",
+    "InstanceType": "t3.small"
+  }
+}

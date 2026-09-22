@@ -1,0 +1,509 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Application delivery only: GitHub OIDC role and optional CodePipeline V2 / CodeBuild'
+Parameters:
+  FoundationStack:
+    Type: String
+  RuntimeStack:
+    Type: String
+  Mode:
+    Type: String
+    AllowedValues:
+    - ecs
+    - ec2
+  GitHubRepository:
+    Type: String
+    AllowedPattern: '[^/]+/[^/]+'
+  GitHubEnvironment:
+    Type: String
+    Default: dev
+  GitHubOidcProviderArn:
+    Type: String
+  ConnectionArn:
+    Type: String
+    Default: arn:aws:codeconnections:us-east-1:000000000000:connection/00000000-0000-0000-0000-000000000000
+    Description: Supply an AVAILABLE GitHub CodeConnections ARN when Driver=native. Default grants no usable access.
+  Branch:
+    Type: String
+    Default: main
+  Driver:
+    Type: String
+    Default: github
+    AllowedValues:
+    - github
+    - native
+  EcsServiceArns:
+    Type: CommaDelimitedList
+    Default: arn:aws:ecs:us-east-1:000000000000:service/not-configured/not-configured
+  EcsTaskRoleArns:
+    Type: CommaDelimitedList
+    Default: arn:aws:iam::000000000000:role/not-configured
+  CodeDeployApplicationName:
+    Type: String
+    Default: ''
+  CodeDeployGroupName:
+    Type: String
+    Default: ''
+  AppUrl:
+    Type: String
+    AllowedPattern: https://[^/]+/?
+    Description: Validated DNS name pointing to the runtime ALB, matching the ACM certificate
+Conditions:
+  Native:
+    Fn::Equals:
+    - Ref: Driver
+    - native
+  ECS:
+    Fn::Equals:
+    - Ref: Mode
+    - ecs
+  IsProd:
+    Fn::Equals:
+    - Ref: GitHubEnvironment
+    - prod
+Resources:
+  BuildLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+  GitHubAppRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Federated:
+              Ref: GitHubOidcProviderArn
+          Action: sts:AssumeRoleWithWebIdentity
+          Condition:
+            StringEquals:
+              token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              token.actions.githubusercontent.com:sub:
+                Fn::Sub: repo:${GitHubRepository}:environment:${GitHubEnvironment}
+      Policies:
+      - PolicyName: ApplicationOnly
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - cloudformation:DescribeStacks
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${FoundationStack}/*
+            - Fn::Sub: arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${RuntimeStack}/*
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:PutObject
+            Resource:
+              Fn::Join:
+              - ''
+              - - 'arn:'
+                - Ref: AWS::Partition
+                - ':s3:::'
+                - Fn::ImportValue:
+                    Fn::Sub: ${FoundationStack}-Artifacts
+                - /releases/*
+          - Effect: Allow
+            Action:
+            - ecr:GetAuthorizationToken
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - ecr:BatchCheckLayerAvailability
+            - ecr:InitiateLayerUpload
+            - ecr:UploadLayerPart
+            - ecr:CompleteLayerUpload
+            - ecr:PutImage
+            - ecr:DescribeImages
+            - ecr:BatchGetImage
+            - ecr:GetDownloadUrlForLayer
+            Resource:
+            - Fn::ImportValue:
+                Fn::Sub: ${FoundationStack}-FrontendRepositoryArn
+            - Fn::ImportValue:
+                Fn::Sub: ${FoundationStack}-BackendRepositoryArn
+          - Fn::If:
+            - ECS
+            - Effect: Allow
+              Action:
+              - ecs:DescribeServices
+              - ecs:UpdateService
+              Resource:
+                Ref: EcsServiceArns
+            - Ref: AWS::NoValue
+          - Fn::If:
+            - ECS
+            - Effect: Allow
+              Action:
+              - ecs:RegisterTaskDefinition
+              - ecs:DescribeTaskDefinition
+              Resource: '*'
+            - Ref: AWS::NoValue
+          - Fn::If:
+            - ECS
+            - Effect: Allow
+              Action: iam:PassRole
+              Resource:
+                Ref: EcsTaskRoleArns
+              Condition:
+                StringEquals:
+                  iam:PassedToService: ecs-tasks.amazonaws.com
+            - Ref: AWS::NoValue
+          - Fn::If:
+            - ECS
+            - Ref: AWS::NoValue
+            - Effect: Allow
+              Action:
+              - codedeploy:CreateDeployment
+              - codedeploy:GetDeploymentGroup
+              - codedeploy:GetApplicationRevision
+              - codedeploy:RegisterApplicationRevision
+              Resource:
+              - Fn::Sub: arn:${AWS::Partition}:codedeploy:${AWS::Region}:${AWS::AccountId}:application:${CodeDeployApplicationName}
+              - Fn::Sub: arn:${AWS::Partition}:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentgroup:${CodeDeployApplicationName}/${CodeDeployGroupName}
+              - Fn::Sub: arn:${AWS::Partition}:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentconfig:CodeDeployDefault.OneAtATime
+          - Fn::If:
+            - ECS
+            - Ref: AWS::NoValue
+            - Effect: Allow
+              Action: codedeploy:GetDeployment
+              Resource: '*'
+          - Effect: Deny
+            Action:
+            - cloudformation:CreateStack
+            - cloudformation:UpdateStack
+            - cloudformation:DeleteStack
+            - cloudformation:CreateChangeSet
+            - cloudformation:ExecuteChangeSet
+            Resource: '*'
+  BuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: RequiredAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - cloudformation:DescribeStacks
+            Resource:
+            - Fn::Sub: arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${FoundationStack}/*
+            - Fn::Sub: arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${RuntimeStack}/*
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:PutObject
+            Resource:
+              Fn::Join:
+              - ''
+              - - 'arn:'
+                - Ref: AWS::Partition
+                - ':s3:::'
+                - Fn::ImportValue:
+                    Fn::Sub: ${FoundationStack}-Artifacts
+                - /releases/*
+          - Effect: Allow
+            Action:
+            - ecr:GetAuthorizationToken
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - ecr:BatchCheckLayerAvailability
+            - ecr:InitiateLayerUpload
+            - ecr:UploadLayerPart
+            - ecr:CompleteLayerUpload
+            - ecr:PutImage
+            - ecr:DescribeImages
+            - ecr:BatchGetImage
+            - ecr:GetDownloadUrlForLayer
+            Resource:
+            - Fn::ImportValue:
+                Fn::Sub: ${FoundationStack}-FrontendRepositoryArn
+            - Fn::ImportValue:
+                Fn::Sub: ${FoundationStack}-BackendRepositoryArn
+          - Fn::If:
+            - ECS
+            - Effect: Allow
+              Action:
+              - ecs:DescribeServices
+              - ecs:UpdateService
+              Resource:
+                Ref: EcsServiceArns
+            - Ref: AWS::NoValue
+          - Fn::If:
+            - ECS
+            - Effect: Allow
+              Action:
+              - ecs:RegisterTaskDefinition
+              - ecs:DescribeTaskDefinition
+              Resource: '*'
+            - Ref: AWS::NoValue
+          - Fn::If:
+            - ECS
+            - Effect: Allow
+              Action: iam:PassRole
+              Resource:
+                Ref: EcsTaskRoleArns
+              Condition:
+                StringEquals:
+                  iam:PassedToService: ecs-tasks.amazonaws.com
+            - Ref: AWS::NoValue
+          - Fn::If:
+            - ECS
+            - Ref: AWS::NoValue
+            - Effect: Allow
+              Action:
+              - codedeploy:CreateDeployment
+              - codedeploy:GetDeploymentGroup
+              - codedeploy:GetApplicationRevision
+              - codedeploy:RegisterApplicationRevision
+              Resource:
+              - Fn::Sub: arn:${AWS::Partition}:codedeploy:${AWS::Region}:${AWS::AccountId}:application:${CodeDeployApplicationName}
+              - Fn::Sub: arn:${AWS::Partition}:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentgroup:${CodeDeployApplicationName}/${CodeDeployGroupName}
+              - Fn::Sub: arn:${AWS::Partition}:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentconfig:CodeDeployDefault.OneAtATime
+          - Fn::If:
+            - ECS
+            - Ref: AWS::NoValue
+            - Effect: Allow
+              Action: codedeploy:GetDeployment
+              Resource: '*'
+          - Effect: Deny
+            Action:
+            - cloudformation:CreateStack
+            - cloudformation:UpdateStack
+            - cloudformation:DeleteStack
+            - cloudformation:CreateChangeSet
+            - cloudformation:ExecuteChangeSet
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+              Fn::GetAtt:
+              - BuildLogs
+              - Arn
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:PutObject
+            Resource:
+              Fn::Join:
+              - ''
+              - - 'arn:'
+                - Ref: AWS::Partition
+                - ':s3:::'
+                - Fn::ImportValue:
+                    Fn::Sub: ${FoundationStack}-Artifacts
+                - Fn::Sub: /pipeline-${AWS::StackName}/*
+          - Effect: Allow
+            Action:
+            - s3:GetBucketAcl
+            - s3:GetBucketLocation
+            Resource:
+              Fn::Join:
+              - ''
+              - - 'arn:'
+                - Ref: AWS::Partition
+                - ':s3:::'
+                - Fn::ImportValue:
+                    Fn::Sub: ${FoundationStack}-Artifacts
+  Build:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      ServiceRole:
+        Fn::GetAtt:
+        - BuildRole
+        - Arn
+      TimeoutInMinutes: 30
+      ConcurrentBuildLimit: 1
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: ci/buildspec-app.yml
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+        - Name: FOUNDATION_STACK
+          Value:
+            Ref: FoundationStack
+        - Name: RUNTIME_STACK
+          Value:
+            Ref: RuntimeStack
+        - Name: DEPLOY_MODE
+          Value:
+            Ref: Mode
+        - Name: APP_URL
+          Value:
+            Ref: AppUrl
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName:
+            Ref: BuildLogs
+    Condition: Native
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: codepipeline.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: RequiredAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - codestar-connections:UseConnection
+            - codeconnections:UseConnection
+            Resource:
+              Ref: ConnectionArn
+          - Effect: Allow
+            Action:
+            - codebuild:StartBuild
+            - codebuild:BatchGetBuilds
+            Resource:
+              Fn::GetAtt:
+              - Build
+              - Arn
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:PutObject
+            Resource:
+              Fn::Join:
+              - ''
+              - - 'arn:'
+                - Ref: AWS::Partition
+                - ':s3:::'
+                - Fn::ImportValue:
+                    Fn::Sub: ${FoundationStack}-Artifacts
+                - Fn::Sub: /pipeline-${AWS::StackName}/*
+          - Effect: Allow
+            Action:
+            - s3:GetBucketVersioning
+            - s3:GetBucketLocation
+            Resource:
+              Fn::Join:
+              - ''
+              - - 'arn:'
+                - Ref: AWS::Partition
+                - ':s3:::'
+                - Fn::ImportValue:
+                    Fn::Sub: ${FoundationStack}-Artifacts
+    Condition: Native
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name:
+        Fn::Sub: pipeline-${AWS::StackName}
+      RoleArn:
+        Fn::GetAtt:
+        - PipelineRole
+        - Arn
+      PipelineType: V2
+      ExecutionMode: QUEUED
+      ArtifactStore:
+        Type: S3
+        Location:
+          Fn::ImportValue:
+            Fn::Sub: ${FoundationStack}-Artifacts
+      Triggers:
+      - ProviderType: CodeStarSourceConnection
+        GitConfiguration:
+          SourceActionName: Source
+          Push:
+          - Branches:
+              Includes:
+              - Ref: Branch
+            FilePaths:
+              Includes:
+              - apps/**
+              - deploy/**
+              - scripts/deploy_app.py
+              - ci/buildspec-app.yml
+              - tests/**
+              - requirements-dev.txt
+              - scripts/smoke_frontend.py
+      Stages:
+      - Name: Source
+        Actions:
+        - Name: Source
+          ActionTypeId:
+            Category: Source
+            Owner: AWS
+            Provider: CodeStarSourceConnection
+            Version: '1'
+          Configuration:
+            ConnectionArn:
+              Ref: ConnectionArn
+            FullRepositoryId:
+              Ref: GitHubRepository
+            BranchName:
+              Ref: Branch
+            DetectChanges: 'false'
+          OutputArtifacts:
+          - Name: SourceCode
+          RunOrder: 1
+      - Fn::If:
+        - IsProd
+        - Name: Approval
+          Actions:
+          - Name: ApproveProductionRelease
+            ActionTypeId:
+              Category: Approval
+              Owner: AWS
+              Provider: Manual
+              Version: '1'
+            RunOrder: 1
+        - Ref: AWS::NoValue
+      - Name: BuildTestDeploy
+        Actions:
+        - Name: ApplicationOnly
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Provider: CodeBuild
+            Version: '1'
+          Configuration:
+            ProjectName:
+              Ref: Build
+          InputArtifacts:
+          - Name: SourceCode
+          RunOrder: 1
+          OutputArtifacts:
+          - Name: ReleaseManifest
+    Condition: Native
+Outputs:
+  GitHubAppRoleArn:
+    Value:
+      Fn::GetAtt:
+      - GitHubAppRole
+      - Arn
+  NativePipeline:
+    Condition: Native
+    Value:
+      Ref: Pipeline

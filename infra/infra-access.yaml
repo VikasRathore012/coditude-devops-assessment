@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Separate GitHub infrastructure role; pass an administrator-governed CloudFormation execution role
+Parameters:
+  GitHubRepository:
+    Type: String
+  GitHubEnvironment:
+    Type: String
+    Default: infra-dev
+  GitHubOidcProviderArn:
+    Type: String
+  ExecutionRoleArn:
+    Type: String
+  StackPrefix:
+    Type: String
+    Default: coditude-dev-
+Resources:
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Federated:
+              Ref: GitHubOidcProviderArn
+          Action: sts:AssumeRoleWithWebIdentity
+          Condition:
+            StringEquals:
+              token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              token.actions.githubusercontent.com:sub:
+                Fn::Sub: repo:${GitHubRepository}:environment:${GitHubEnvironment}
+      Policies:
+      - PolicyName: InfrastructureChanges
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - cloudformation:CreateChangeSet
+            - cloudformation:DescribeChangeSet
+            - cloudformation:ExecuteChangeSet
+            - cloudformation:DescribeStacks
+            - cloudformation:DescribeStackEvents
+            - cloudformation:GetTemplate
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${StackPrefix}*/*
+          - Effect: Allow
+            Action:
+            - cloudformation:DescribeChangeSet
+            - cloudformation:ExecuteChangeSet
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/review-*/*
+          - Effect: Allow
+            Action: iam:PassRole
+            Resource:
+              Ref: ExecutionRoleArn
+            Condition:
+              StringEquals:
+                iam:PassedToService: cloudformation.amazonaws.com
+          - Effect: Allow
+            Action:
+            - ecs:DescribeServices
+            - ecs:DescribeTaskDefinition
+            Resource: '*'
+Outputs:
+  RoleArn:
+    Value:
+      Fn::GetAtt:
+      - Role
+      - Arn

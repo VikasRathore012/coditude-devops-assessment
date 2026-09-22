@@ -1,0 +1,658 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Coditude foundation: two AZ network, private RDS, secrets, artifacts and ECR'
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+    - dev
+    - staging
+    - prod
+  VpcCidr:
+    Type: String
+    Default: 10.40.0.0/16
+  DbClass:
+    Type: String
+    Default: db.t4g.micro
+  AlertEmail:
+    Type: String
+    Default: ''
+  DBName:
+    Type: String
+    Default: assessment
+    AllowedPattern: '[a-z][a-z0-9]{0,30}'
+  DbEngineVersion:
+    Type: String
+    Default: '17.11'
+    AllowedPattern: 17\.[0-9]+
+    Description: Confirm this PostgreSQL 17 minor version is offered in the target region.
+Conditions:
+  IsProd:
+    Fn::Equals:
+    - Ref: Environment
+    - prod
+  HasEmail:
+    Fn::Not:
+    - Fn::Equals:
+      - Ref: AlertEmail
+      - ''
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock:
+        Ref: VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+      - Key: Name
+        Value:
+          Ref: AWS::StackName
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties: {}
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: Vpc
+      InternetGatewayId:
+        Ref: InternetGateway
+  PublicRoutes:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: Vpc
+  PublicInternet:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PublicRoutes
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+    DependsOn: GatewayAttachment
+  Public1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: Vpc
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs: ''
+      CidrBlock:
+        Fn::Select:
+        - 0
+        - Fn::Cidr:
+          - Ref: VpcCidr
+          - 6
+          - 8
+      MapPublicIpOnLaunch: false
+  Public1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: Public1
+      RouteTableId:
+        Ref: PublicRoutes
+  Private1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: Vpc
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs: ''
+      CidrBlock:
+        Fn::Select:
+        - 2
+        - Fn::Cidr:
+          - Ref: VpcCidr
+          - 6
+          - 8
+      MapPublicIpOnLaunch: false
+  Private1Routes:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: Vpc
+  Private1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: Private1
+      RouteTableId:
+        Ref: Private1Routes
+  Database1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: Vpc
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs: ''
+      CidrBlock:
+        Fn::Select:
+        - 4
+        - Fn::Cidr:
+          - Ref: VpcCidr
+          - 6
+          - 8
+      MapPublicIpOnLaunch: false
+  Database1Routes:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: Vpc
+  Database1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: Database1
+      RouteTableId:
+        Ref: Database1Routes
+  NatEip1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  Nat1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - NatEip1
+        - AllocationId
+      SubnetId:
+        Ref: Public1
+    DependsOn: GatewayAttachment
+  Private1Internet:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: Private1Routes
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: Nat1
+  Public2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: Vpc
+      AvailabilityZone:
+        Fn::Select:
+        - 1
+        - Fn::GetAZs: ''
+      CidrBlock:
+        Fn::Select:
+        - 1
+        - Fn::Cidr:
+          - Ref: VpcCidr
+          - 6
+          - 8
+      MapPublicIpOnLaunch: false
+  Public2Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: Public2
+      RouteTableId:
+        Ref: PublicRoutes
+  Private2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: Vpc
+      AvailabilityZone:
+        Fn::Select:
+        - 1
+        - Fn::GetAZs: ''
+      CidrBlock:
+        Fn::Select:
+        - 3
+        - Fn::Cidr:
+          - Ref: VpcCidr
+          - 6
+          - 8
+      MapPublicIpOnLaunch: false
+  Private2Routes:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: Vpc
+  Private2Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: Private2
+      RouteTableId:
+        Ref: Private2Routes
+  Database2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: Vpc
+      AvailabilityZone:
+        Fn::Select:
+        - 1
+        - Fn::GetAZs: ''
+      CidrBlock:
+        Fn::Select:
+        - 5
+        - Fn::Cidr:
+          - Ref: VpcCidr
+          - 6
+          - 8
+      MapPublicIpOnLaunch: false
+  Database2Routes:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: Vpc
+  Database2Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: Database2
+      RouteTableId:
+        Ref: Database2Routes
+  NatEip2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+    Condition: IsProd
+  Nat2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - NatEip2
+        - AllocationId
+      SubnetId:
+        Ref: Public2
+    DependsOn: GatewayAttachment
+    Condition: IsProd
+  Private2Internet:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: Private2Routes
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Fn::If:
+        - IsProd
+        - Ref: Nat2
+        - Ref: Nat1
+  ApplicationSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId:
+        Ref: Vpc
+      GroupDescription: Private application and bootstrap workloads; runtime stacks add ALB ingress
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 5432
+        ToPort: 5432
+        CidrIp:
+          Ref: VpcCidr
+  DatabaseSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId:
+        Ref: Vpc
+      GroupDescription: PostgreSQL from application security group only
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 5432
+        ToPort: 5432
+        SourceSecurityGroupId:
+          Ref: ApplicationSG
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 1
+        ToPort: 1
+        CidrIp: 127.0.0.1/32
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Isolated database subnets
+      SubnetIds:
+      - Ref: Database1
+      - Ref: Database2
+  DBParameters:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: Require encrypted PostgreSQL connections
+      Family: postgres17
+      Parameters:
+        rds.force_ssl: '1'
+        log_connections: '1'
+        log_disconnections: '1'
+  Database:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      Engine: postgres
+      EngineVersion:
+        Ref: DbEngineVersion
+      DBInstanceClass:
+        Ref: DbClass
+      AllocatedStorage: '20'
+      MaxAllocatedStorage: 100
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName:
+        Ref: DBName
+      MasterUsername: dbadmin
+      ManageMasterUserPassword: true
+      DBSubnetGroupName:
+        Ref: DBSubnetGroup
+      DBParameterGroupName:
+        Ref: DBParameters
+      VPCSecurityGroups:
+      - Ref: DatabaseSG
+      MultiAZ:
+        Fn::If:
+        - IsProd
+        - true
+        - false
+      PubliclyAccessible: false
+      BackupRetentionPeriod:
+        Fn::If:
+        - IsProd
+        - 14
+        - 3
+      DeletionProtection:
+        Fn::If:
+        - IsProd
+        - true
+        - false
+      CopyTagsToSnapshot: true
+      EnableCloudwatchLogsExports:
+      - postgresql
+      - upgrade
+      AutoMinorVersionUpgrade: true
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+  AppSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Dedicated DB login. Initialize with database-bootstrap before application deployment.
+      GenerateSecretString:
+        SecretStringTemplate: '{"username":"assessment_app"}'
+        GenerateStringKey: password
+        PasswordLength: 40
+        ExcludePunctuation: true
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+  Artifacts:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+  ArtifactsPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: Artifacts
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Deny
+          Principal: '*'
+          Action: s3:*
+          Resource:
+          - Fn::GetAtt:
+            - Artifacts
+            - Arn
+          - Fn::Sub: ${Artifacts.Arn}/*
+          Condition:
+            Bool:
+              aws:SecureTransport: 'false'
+  FrontendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules": [{"rulePriority": 1, "description": "Expire untagged images after 7 days",
+          "selection": {"tagStatus": "untagged", "countType": "sinceImagePushed", "countUnit": "days", "countNumber":
+          7}, "action": {"type": "expire"}}]}'
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+  BackendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules": [{"rulePriority": 1, "description": "Expire untagged images after 7 days",
+          "selection": {"tagStatus": "untagged", "countType": "sinceImagePushed", "countUnit": "days", "countNumber":
+          7}, "action": {"type": "expire"}}]}'
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+  Alerts:
+    Type: AWS::SNS::Topic
+    Properties: {}
+  EmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn:
+        Ref: Alerts
+      Protocol: email
+      Endpoint:
+        Ref: AlertEmail
+    Condition: HasEmail
+  DatabaseStorageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: RDS free disk below 5 GiB
+      Namespace: AWS/RDS
+      MetricName: FreeStorageSpace
+      Dimensions:
+      - Name: DBInstanceIdentifier
+        Value:
+          Ref: Database
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5368709120
+      ComparisonOperator: LessThanThreshold
+      AlarmActions:
+      - Ref: Alerts
+      TreatMissingData: missing
+  FlowLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays:
+        Fn::If:
+        - IsProd
+        - 90
+        - 14
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+  FlowLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: vpc-flow-logs.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: RequiredAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - logs:DescribeLogGroups
+            - logs:DescribeLogStreams
+            Resource:
+              Fn::GetAtt:
+              - FlowLogs
+              - Arn
+  VpcFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceType: VPC
+      ResourceId:
+        Ref: Vpc
+      TrafficType: REJECT
+      LogDestinationType: cloud-watch-logs
+      LogGroupName:
+        Ref: FlowLogs
+      DeliverLogsPermissionArn:
+        Fn::GetAtt:
+        - FlowLogsRole
+        - Arn
+Outputs:
+  Vpc:
+    Value:
+      Ref: Vpc
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-Vpc
+  Public1:
+    Value:
+      Ref: Public1
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-Public1
+  Public2:
+    Value:
+      Ref: Public2
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-Public2
+  Private1:
+    Value:
+      Ref: Private1
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-Private1
+  Private2:
+    Value:
+      Ref: Private2
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-Private2
+  ApplicationSG:
+    Value:
+      Ref: ApplicationSG
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-ApplicationSG
+  Artifacts:
+    Value:
+      Ref: Artifacts
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-Artifacts
+  AppSecret:
+    Value:
+      Ref: AppSecret
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-AppSecret
+  Alerts:
+    Value:
+      Ref: Alerts
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-Alerts
+  DBHost:
+    Value:
+      Fn::GetAtt:
+      - Database
+      - Endpoint.Address
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-DBHost
+  DBName:
+    Value:
+      Ref: DBName
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-DBName
+  AdminSecret:
+    Value:
+      Fn::GetAtt:
+      - Database
+      - MasterUserSecret.SecretArn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-AdminSecret
+  FrontendRepository:
+    Value:
+      Ref: FrontendRepository
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-FrontendRepository
+  FrontendRepositoryUri:
+    Value:
+      Fn::GetAtt:
+      - FrontendRepository
+      - RepositoryUri
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-FrontendRepositoryUri
+  FrontendRepositoryArn:
+    Value:
+      Fn::GetAtt:
+      - FrontendRepository
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-FrontendRepositoryArn
+  BackendRepository:
+    Value:
+      Ref: BackendRepository
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-BackendRepository
+  BackendRepositoryUri:
+    Value:
+      Fn::GetAtt:
+      - BackendRepository
+      - RepositoryUri
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-BackendRepositoryUri
+  BackendRepositoryArn:
+    Value:
+      Fn::GetAtt:
+      - BackendRepository
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-BackendRepositoryArn

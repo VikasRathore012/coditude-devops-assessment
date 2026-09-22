@@ -1,0 +1,5 @@
+﻿NAME                                    IMAGE                                 COMMAND                  SERVICE    CREATED         STATUS                   PORTS
+coditude-devops-assessment-backend-1    coditude-devops-assessment-backend    "python -m uvicorn mΓÇª"   backend    4 minutes ago   Up 4 minutes             8000/tcp
+coditude-devops-assessment-database-1   postgres:17                           "docker-entrypoint.sΓÇª"   database   4 minutes ago   Up 4 minutes (healthy)   5432/tcp
+coditude-devops-assessment-frontend-1   coditude-devops-assessment-frontend   "docker-entrypoint.sΓÇª"   frontend   4 minutes ago   Up 4 minutes             3000/tcp
+coditude-devops-assessment-gateway-1    nginx:stable-alpine                   "/docker-entrypoint.ΓÇª"   gateway    4 minutes ago   Up 4 minutes             127.0.0.1:8080->80/tcp

@@ -1,0 +1,13 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create once per account only if GitHub OIDC provider does not already exist
+Resources:
+  Provider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+      - sts.amazonaws.com
+Outputs:
+  ProviderArn:
+    Value:
+      Ref: Provider

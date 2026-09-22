@@ -1,0 +1,26 @@
+{
+  "foundation": {
+    "Environment": "staging",
+    "VpcCidr": "10.41.0.0/16",
+    "DbClass": "db.t4g.small",
+    "DBName": "assessment",
+    "AlertEmail": ""
+  },
+  "ecs": {
+    "FoundationStack": "coditude-staging-foundation",
+    "Environment": "staging",
+    "CertificateArn": "REPLACE_WITH_ACM_CERTIFICATE_ARN",
+    "MinCapacity": "2",
+    "MaxCapacity": "4",
+    "FrontendImage": "REPLACE_WITH_ECR_DIGEST",
+    "BackendImage": "REPLACE_WITH_ECR_DIGEST"
+  },
+  "ec2": {
+    "FoundationStack": "coditude-staging-foundation",
+    "Environment": "staging",
+    "CertificateArn": "REPLACE_WITH_ACM_CERTIFICATE_ARN",
+    "MinCapacity": "2",
+    "MaxCapacity": "4",
+    "InstanceType": "t3.small"
+  }
+}

@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080"><rect width="100%" height="100%" fill="#f2f5fa"/>
+<text x="50" y="62" font-family="DejaVu Sans,sans-serif" font-size="32" fill="#263750" font-weight="700">CODITUDE  /  AWS DEPLOYMENT ARCHITECTURE</text>
+<text x="50" y="100" font-family="DejaVu Sans,sans-serif" font-size="20" fill="#263750" font-weight="400">Two implementation options. Shared foundation. No live AWS deployment claimed.</text>
+<rect x="50" y="135" width="360" height="125" rx="14" fill="white" stroke="#cbd5e1" stroke-width="2"/>
+<text x="70" y="172" font-family="DejaVu Sans,sans-serif" font-size="22" fill="#18314f" font-weight="700">Source and review</text>
+<text x="70" y="204" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">GitHub + protected branches</text>
+<text x="70" y="232" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Application / infrastructure paths</text>
+<rect x="460" y="135" width="460" height="125" rx="14" fill="white" stroke="#cbd5e1" stroke-width="2"/>
+<text x="480" y="172" font-family="DejaVu Sans,sans-serif" font-size="22" fill="#18314f" font-weight="700">Infrastructure workflow</text>
+<text x="480" y="204" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">CloudFormation change set → review</text>
+<text x="480" y="232" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Separate role and explicit apply</text>
+<rect x="970" y="135" width="580" height="125" rx="14" fill="white" stroke="#cbd5e1" stroke-width="2"/>
+<text x="990" y="172" font-family="DejaVu Sans,sans-serif" font-size="22" fill="#18314f" font-weight="700">Application delivery</text>
+<text x="990" y="204" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">GitHub Actions OR CodePipeline + CodeBuild</text>
+<text x="990" y="232" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">ECR digests / versioned S3 → app-only deployment</text>
+<polyline points="410,174 460,174" fill="none" stroke="#546b87" stroke-width="3"/>
+<polygon points="460,174 449.1946347717679,179.21958640933477 449.1946347717679,168.78041359066523" fill="#546b87"/>
+<polyline points="410,227 438,227 438,282 1260,282 1260,260" fill="none" stroke="#546b87" stroke-width="3"/>
+<polygon points="1260,260 1265.2195864093349,270.8053652282321 1254.7804135906651,270.8053652282321" fill="#546b87"/>
+<rect x="50" y="325" width="1500" height="650" rx="14" fill="#e9eff8" stroke="#9bb0cc" stroke-width="2"/>
+<text x="70" y="362" font-family="DejaVu Sans,sans-serif" font-size="22" fill="#18314f" font-weight="700">AWS VPC  •  Two Availability Zones</text>
+<rect x="90" y="390" width="340" height="145" rx="14" fill="white" stroke="#cbd5e1" stroke-width="2"/>
+<text x="110" y="427" font-family="DejaVu Sans,sans-serif" font-size="22" fill="#18314f" font-weight="700">Public subnets</text>
+<text x="110" y="459" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">HTTPS ALB + ACM certificate</text>
+<text x="110" y="487" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">HTTP → HTTPS redirect</text>
+<text x="110" y="515" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">NAT per AZ in production</text>
+<rect x="490" y="390" width="580" height="200" rx="14" fill="white" stroke="#cbd5e1" stroke-width="2"/>
+<text x="510" y="427" font-family="DejaVu Sans,sans-serif" font-size="22" fill="#18314f" font-weight="700">Option A — ECS Fargate</text>
+<text x="510" y="459" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Private Next.js service :3000</text>
+<text x="510" y="487" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Private Python service :8000</text>
+<text x="510" y="515" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Independent scaling; min. 2 replicas each</text>
+<text x="510" y="543" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Image digests; rolling release + circuit breaker</text>
+<rect x="490" y="650" width="580" height="200" rx="14" fill="white" stroke="#cbd5e1" stroke-width="2"/>
+<text x="510" y="687" font-family="DejaVu Sans,sans-serif" font-size="22" fill="#18314f" font-weight="700">Option B — EC2 Auto Scaling</text>
+<text x="510" y="719" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Private fleet across both AZs</text>
+<text x="510" y="747" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Node.js + Python systemd processes</text>
+<text x="510" y="775" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">CodeDeploy drains traffic, one host at a time</text>
+<text x="510" y="803" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">IMDSv2; SSM access; no public IP / SSH</text>
+<rect x="1140" y="500" width="365" height="150" rx="14" fill="white" stroke="#cbd5e1" stroke-width="2"/>
+<text x="1160" y="537" font-family="DejaVu Sans,sans-serif" font-size="22" fill="#18314f" font-weight="700">Isolated DB subnets</text>
+<text x="1160" y="569" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">RDS PostgreSQL 17</text>
+<text x="1160" y="597" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Multi-AZ + backups in prod</text>
+<text x="1160" y="625" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">TLS; only app SG on 5432</text>
+<rect x="1140" y="700" width="365" height="120" rx="14" fill="white" stroke="#cbd5e1" stroke-width="2"/>
+<text x="1160" y="737" font-family="DejaVu Sans,sans-serif" font-size="22" fill="#18314f" font-weight="700">Secrets Manager</text>
+<text x="1160" y="769" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Dedicated application DB login</text>
+<text x="1160" y="797" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Separate admin bootstrap</text>
+<rect x="90" y="640" width="340" height="180" rx="14" fill="white" stroke="#cbd5e1" stroke-width="2"/>
+<text x="110" y="677" font-family="DejaVu Sans,sans-serif" font-size="22" fill="#18314f" font-weight="700">CloudWatch + SNS</text>
+<text x="110" y="709" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Application / system logs</text>
+<text x="110" y="737" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Unhealthy targets and 5xx</text>
+<text x="110" y="765" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">RDS storage; VPC reject logs</text>
+<text x="110" y="793" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="400">Alert email confirmation</text>
+<text x="98" y="583" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="700">Routing: / → Next.js</text>
+<text x="98" y="613" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#263750" font-weight="700">/api/* → Python</text>
+<polyline points="430,430 490,430" fill="none" stroke="#546b87" stroke-width="3"/>
+<polygon points="490,430 479.1946347717679,435.21958640933474 479.1946347717679,424.78041359066526" fill="#546b87"/>
+<polyline points="430,495 463,495 463,700 490,700" fill="none" stroke="#546b87" stroke-width="3"/>
+<polygon points="490,700 479.1946347717679,705.2195864093347 479.1946347717679,694.7804135906653" fill="#546b87"/>
+<polyline points="1070,480 1103,480 1103,545 1140,545" fill="none" stroke="#546b87" stroke-width="3"/>
+<polygon points="1140,545 1129.1946347717678,550.2195864093347 1129.1946347717678,539.7804135906653" fill="#546b87"/>
+<polyline points="1070,700 1103,700 1103,608 1140,608" fill="none" stroke="#546b87" stroke-width="3"/>
+<polygon points="1140,608 1129.1946347717678,613.2195864093347 1129.1946347717678,602.7804135906653" fill="#546b87"/>
+<polyline points="1070,755 1140,755" fill="none" stroke="#1c877e" stroke-width="3"/>
+<polygon points="1140,755 1129.1946347717678,760.2195864093347 1129.1946347717678,749.7804135906653" fill="#1c877e"/>
+<polyline points="1050,590 1050,619 1123,619 1123,730 1140,730" fill="none" stroke="#1c877e" stroke-width="3"/>
+<polygon points="1140,730 1129.1946347717678,735.2195864093347 1129.1946347717678,724.7804135906653" fill="#1c877e"/>
+<polyline points="690,260 690,325" fill="none" stroke="#546b87" stroke-width="3"/>
+<polygon points="690,325 684.7804135906653,314.1946347717679 695.2195864093347,314.1946347717679" fill="#546b87"/>
+<polyline points="1500,260 1500,350 1085,350 1085,405 1070,405" fill="none" stroke="#546b87" stroke-width="3"/>
+<polygon points="1070,405 1080.8053652282322,399.78041359066526 1080.8053652282322,410.21958640933474" fill="#546b87"/>
+<polyline points="1085,405 1085,670 1070,670" fill="none" stroke="#546b87" stroke-width="3"/>
+<polygon points="1070,670 1080.8053652282322,664.7804135906653 1080.8053652282322,675.2195864093347" fill="#546b87"/>
+<text x="93" y="903" font-family="DejaVu Sans,sans-serif" font-size="19" fill="#263750" font-weight="400">Production: two NAT gateways + Multi-AZ database. Dev/staging: one NAT + single-AZ database.</text>
+<text x="93" y="937" font-family="DejaVu Sans,sans-serif" font-size="19" fill="#263750" font-weight="400">Application roles explicitly deny CloudFormation writes. Infrastructure changes preserve running image digests.</text>
+<text x="50" y="1028" font-family="DejaVu Sans,sans-serif" font-size="18" fill="#516077" font-weight="400">Assessment implementation | Region, DNS, certificate, account roles and repository identity are deployment inputs.</text>
+</svg>

@@ -1,0 +1,19 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+      nodejs: 22
+    commands:
+      - python -m pip install -r apps/backend/requirements.txt -r requirements-dev.txt
+  pre_build:
+    commands:
+      - python -m pytest tests -q
+      - cd apps/frontend && npm ci && npm run build && cd ../..
+      - python scripts/smoke_frontend.py
+  build:
+    commands:
+      - python scripts/deploy_app.py --foundation "$FOUNDATION_STACK" --runtime "$RUNTIME_STACK" --mode "$DEPLOY_MODE" --revision "$CODEBUILD_RESOLVED_SOURCE_VERSION" --url "$APP_URL"
+artifacts:
+  files:
+    - dist/release.json
